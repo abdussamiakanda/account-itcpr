@@ -193,13 +193,13 @@ const Dashboard = () => {
       const feeCurrency = monthlyFeeUSD ? 'USD' : (monthlyFeeBDT ? 'BDT' : null);
       const feeAmount = monthlyFeeUSD || monthlyFeeBDT || null;
 
-      // Get current month/year (starting from January 2026)
+      // Get current month/year (starting from February 2026)
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth(); // 0-11
       
-      // Only check for months starting from January 2026
-      if (currentYear < 2026 || (currentYear === 2026 && currentMonth < 0)) {
+      // Only check for months starting from February 2026
+      if (currentYear < 2026 || (currentYear === 2026 && currentMonth < 1)) {
         setStats({ 
           pendingPayments: 0, 
           pendingMonths: [],
@@ -212,10 +212,10 @@ const Dashboard = () => {
         return;
       }
 
-      // Calculate all months from January 2026 to current month
+      // Calculate all months from February 2026 to current month
       const monthsToCheck = [];
       const startYear = 2026;
-      const startMonth = 0; // January
+      const startMonth = 1; // February
       
       for (let year = startYear; year <= currentYear; year++) {
         const monthStart = year === startYear ? startMonth : 0;
@@ -234,15 +234,15 @@ const Dashboard = () => {
         }
       }
 
-      // Get all monthly_fee payments for this user from January 2026 onwards
-      const jan2026Start = new Date(2026, 0, 1);
+      // Get all monthly_fee payments for this user from February 2026 onwards
+      const feb2026Start = new Date(2026, 1, 1);
       const { data: allPayments, error: allPaymentsError } = await supabaseClient
         .from('finances')
         .select('*')
         .eq('type', 'income')
         .eq('category', 'monthly_fee')
         .eq('user', user.uid)
-        .gte('created_at', jan2026Start.toISOString())
+        .gte('created_at', feb2026Start.toISOString())
         .order('created_at', { ascending: false });
 
       if (allPaymentsError) throw allPaymentsError;
