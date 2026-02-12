@@ -168,23 +168,24 @@ const Dashboard = () => {
       return;
     }
     
-    // Prevent duplicate loads for the same user
-    if (hasLoadedRef.current === user.uid) {
+    // Prevent duplicate loads for same user + join date (re-run when userData loads with joinDate)
+    const joinKey = userData?.joinDate ?? userData?.memberSince ?? userData?.createdAt ?? user?.metadata?.creationTime ?? '';
+    if (hasLoadedRef.current === `${user.uid}-${joinKey}`) {
       return;
     }
     
     // Load dashboard data (userData might be null if user doesn't exist in Firestore, that's ok)
     loadDashboardData();
-  }, [user?.uid, authLoading]);
+  }, [user?.uid, user?.metadata?.creationTime, authLoading, userData?.joinDate, userData?.memberSince, userData?.createdAt]);
 
   const loadDashboardData = async () => {
     if (!user) return;
     
-    // Mark as loaded for this user
-    hasLoadedRef.current = user.uid;
-    
     setLoading(true);
     try {
+      const joinDateRaw = userData?.joinDate ?? userData?.memberSince ?? userData?.createdAt ?? user?.metadata?.creationTime;
+      hasLoadedRef.current = `${user.uid}-${joinDateRaw || 'none'}`;
+
       // Get fee settings from userData
       const monthlyFeeUSD = userData?.monthlyFeeUSD;
       const monthlyFeeBDT = userData?.monthlyFeeBDT;
@@ -213,11 +214,31 @@ const Dashboard = () => {
         return;
       }
 
-      // Calculate all months from February 2026 to current month
+      // Fee start: Feb 2026 for everyone, except users joining after Feb 2026 use join month
+      // (if they join after the 10th, fee starts next month)
+      const feb2026 = new Date(2026, 1, 1); // Feb 1, 2026
+      let startYear = 2026;
+      let startMonth = 1; // February
+      if (joinDateRaw) {
+        const joinDate = new Date(joinDateRaw);
+        if (joinDate > feb2026) {
+          const joinYear = joinDate.getFullYear();
+          const joinMonth = joinDate.getMonth();
+          const joinDay = joinDate.getDate();
+          if (joinDay <= 10) {
+            startYear = joinYear;
+            startMonth = joinMonth;
+          } else {
+            // After 10th: fee from next month
+            const next = new Date(joinYear, joinMonth + 1, 1);
+            startYear = next.getFullYear();
+            startMonth = next.getMonth();
+          }
+        }
+      }
+
+      // Calculate all months from fee start to current month
       const monthsToCheck = [];
-      const startYear = 2026;
-      const startMonth = 1; // February
-      
       for (let year = startYear; year <= currentYear; year++) {
         const monthStart = year === startYear ? startMonth : 0;
         const monthEnd = year === currentYear ? currentMonth : 11;
@@ -235,15 +256,15 @@ const Dashboard = () => {
         }
       }
 
-      // Get all monthly_fee payments for this user from February 2026 onwards
-      const feb2026Start = new Date(2026, 1, 1);
+      // Get all monthly_fee payments for this user from fee start onwards
+      const feeStartDate = new Date(startYear, startMonth, 1);
       const { data: allPayments, error: allPaymentsError } = await supabaseClient
         .from('finances')
         .select('*')
         .eq('type', 'income')
         .eq('category', 'monthly_fee')
         .eq('user', user.uid)
-        .gte('created_at', feb2026Start.toISOString())
+        .gte('created_at', feeStartDate.toISOString())
         .order('created_at', { ascending: false });
 
       if (allPaymentsError) throw allPaymentsError;
